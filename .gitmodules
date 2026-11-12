@@ -1,6 +1,0 @@
-[submodule "src/kilvo"]
-	path = src/kilvo
-	url = https://github.com/JixinGao/KILVO.git
-[submodule "src/rpg_vikit"]
-	path = src/rpg_vikit
-	url = https://github.com/xuankuzcr/rpg_vikit.git

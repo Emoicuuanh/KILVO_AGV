@@ -3,7 +3,7 @@
 Máy host chạy Ubuntu 24.04 nên ROS 1 chạy trong image `kilvo-sim:noetic`. Workspace này được gắn vào container tại `/ws`.
 
 ```
-src/kilvo             KILVO gốc (github.com/JixinGao/KILVO), KHÔNG sửa
+src/kilvo             KILVO (github.com/JixinGao/KILVO, GPL-2.0), sửa trực tiếp tại đây
 src/rpg_vikit         vikit gốc (phụ thuộc của KILVO)
 src/livox_ros_driver  chỉ có message CustomMsg/CustomPoint (cùng MD5 với driver thật)
 src/kilvo_agv_gazebo  nhà xưởng + AGV + các node mô phỏng
@@ -13,11 +13,9 @@ results/              kết quả từng lần chạy
 
 ## Lấy mã nguồn
 ```bash
-git clone --recursive git@github.com:Emoicuuanh/KILVO_AGV.git ~/kilvo_ros1_ws
-# nếu đã clone mà thiếu --recursive:
-git submodule update --init --recursive
+git clone git@github.com:Emoicuuanh/KILVO_AGV.git ~/kilvo_ros1_ws
 ```
-`src/kilvo` và `src/rpg_vikit` là submodule, trỏ về repo gốc của tác giả ở đúng commit đang dùng.
+`src/kilvo` và `src/rpg_vikit` là code gốc của tác giả, đưa thẳng vào repo này để sửa trực tiếp. Xem `UPSTREAM.md` trong từng thư mục để biết nguồn, commit và giấy phép.
 
 ## Một lần duy nhất
 ```bash

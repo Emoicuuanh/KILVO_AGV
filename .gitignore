@@ -11,3 +11,4 @@ results/
 *.log
 __pycache__/
 *.pyc
+.upstream_git/
