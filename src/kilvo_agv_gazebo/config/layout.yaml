@@ -4,12 +4,14 @@
 #   evaluate (sai số tại mã QR, sai số theo vùng)
 # Đơn vị: mét, radian. Gốc tọa độ world ở giữa nhà xưởng, sàn z = 0.
 
+# ===== 1. KHUNG NHÀ XƯỞNG: kích thước, tường, ma sát sàn =====
 hall:
   x: [-22.0, 22.0]
   y: [-13.0, 13.0]
   wall_height: 6.0
   floor_mu: 0.9            # hệ số ma sát sàn thường
 
+# ===== 2. DÃY KỆ =====
 # Các dãy kệ giống hệt nhau, chạy dọc trục x -> hành lang dài, lặp lại
 # (LiDAR suy biến theo phương x, dễ định vị nhầm dãy).
 shelves:
@@ -21,12 +23,14 @@ shelves:
   levels: [0.15, 0.85, 1.55, 2.25] # cao độ các tầng kệ
   pallet_fill: 0.55                # tỉ lệ ô kệ có thùng hàng (seed cố định)
 
+# ===== 3. HÀNH LANG TƯỜNG TRƠN =====
 # Hành lang tường trơn, không đặc trưng -> suy biến LiDAR mạnh nhất
 featureless_corridor:
   x: [-12.0, 12.0]
   walls_y: [9.0, 11.5]
   height: 3.0
 
+# ===== 4. ÁNH SÁNG =====
 # Đèn: chỉ đặt trong các vùng có ánh sáng; vùng tối không có đèn.
 lighting:
   ambient: 0.04
@@ -42,6 +46,7 @@ lighting:
     - [-21, -18, -9, 9]     # lối ngang phía tây
     - [18, 21, -9, 9]       # lối ngang phía đông
 
+# ===== 5. VÙNG KỊCH BẢN (type: normal | lidar_degenerate | dark | slippery) =====
 # Các vùng kịch bản (dùng để gán nhãn và phân tích riêng từng đoạn)
 zones:
   - {name: aisle_A_repetitive, type: lidar_degenerate, box: [-15, 15, 3.0, 5.0]}
@@ -53,6 +58,7 @@ zones:
   - {name: slip_patch_spin,    type: slippery,         box: [-11.5, -8.5, -11.5, -8.5], mu: 0.06}
   - {name: open_south,         type: normal,           box: [-21, 21, -12.5, -7.0]}
 
+# ===== 6. MÃ QR + TRẠM SẠC =====
 # Mã QR dưới sàn (ground truth kiểu thực tế: chỉ biết vị trí tại các điểm này)
 qr:
   size: 0.12

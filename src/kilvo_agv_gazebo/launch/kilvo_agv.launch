@@ -1,11 +1,26 @@
 <launch>
-  <!-- KILVO gốc (không sửa) với config cho AGV mô phỏng — cùng cách nạp tham số như launch gốc của tác giả -->
-  <arg name="config" default="$(find kilvo_agv_gazebo)/config/kilvo_agv_sim.yaml"/>
-  <arg name="camera" default="$(find kilvo_agv_gazebo)/config/camera_agv_sim.yaml"/>
-  <arg name="rviz" default="false"/>
+  <!-- ==========================================================================
+       kilvo_agv.launch — chạy KILVO gốc (code tác giả, chưa sửa) với cảm biến của AGV mô phỏng.
+       Được sim.launch gọi khi kilvo:=true; cũng chạy riêng được:
+         kros roslaunch kilvo_agv_gazebo kilvo_agv.launch rviz:=true
+       Cách nạp tham số giống hệt launch gốc của tác giả (src/kilvo/launch/mapping_mid360_d455i.launch).
+       ========================================================================== -->
+
+  <!-- ===== 1. THAM SỐ ===== -->
+  <arg name="config" default="$(find kilvo_agv_gazebo)/config/kilvo_agv_sim.yaml"/>    <!-- config thuật toán -->
+  <arg name="camera" default="$(find kilvo_agv_gazebo)/config/camera_agv_sim.yaml"/>   <!-- thông số camera -->
+  <arg name="rviz" default="false"/>                                                     <!-- RViz của tác giả -->
+
+  <!-- ===== 2. NẠP CONFIG CHÍNH vào namespace gốc ===== -->
+  <!-- KILVO đọc bằng nh.param("common/lid_topic"...) với NodeHandle gốc -> tham số phải ở /common/... -->
   <rosparam command="load" file="$(arg config)"/>
+
+  <!-- ===== 3. NODE KILVO ===== -->
+  <!-- Tên node phải là laserMapping: KILVO đọc thông số camera trong namespace /laserMapping -->
   <node pkg="kilvo" type="kilvo" name="laserMapping" output="screen">
     <rosparam file="$(arg camera)"/>
   </node>
+
+  <!-- ===== 4. RVIZ của tác giả: bản đồ màu, quỹ đạo, ảnh ===== -->
   <node if="$(arg rviz)" pkg="rviz" type="rviz" name="rviz_kilvo" args="-d $(find kilvo)/rviz_cfg/kilvo.rviz"/>
 </launch>

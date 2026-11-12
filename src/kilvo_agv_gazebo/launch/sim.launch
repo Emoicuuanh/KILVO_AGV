@@ -1,22 +1,43 @@
 <launch>
-  <!-- Nhà xưởng + AGV trong Gazebo 11.
-       roslaunch kilvo_agv_gazebo sim.launch gui:=true
-       Tùy chọn: scenario:=true (tự chạy kịch bản), kilvo:=true, record:=true, rviz:=true -->
-  <arg name="gui" default="true"/>
-  <arg name="rviz" default="false"/>
-  <arg name="scenario" default="false"/>
-  <arg name="kilvo" default="false"/>
-  <arg name="record" default="false"/>
-  <arg name="output_dir" default=""/>
-  <arg name="gpu_lidar" default="false"/>
-  <arg name="lidar_h_samples" default="720"/>
-  <arg name="lidar_v_samples" default="24"/>
+  <!-- ==========================================================================
+       sim.launch — mở nhà xưởng + AGV trong Gazebo 11 và các node mô phỏng.
+
+       Cách chạy (qua lệnh tắt kros):
+         kros roslaunch kilvo_agv_gazebo sim.launch                    # chỉ mô phỏng
+         kros roslaunch kilvo_agv_gazebo sim.launch gui:=false rviz:=true
+         kros roslaunch kilvo_agv_gazebo sim.launch kilvo:=true scenario:=true record:=true
+
+       Sơ đồ dữ liệu:
+         Gazebo ──/lidar/points──> lidar_to_livox ──/livox/lidar──┐
+                ──/imu/data───────────────────────────────────────┼──> KILVO ──/aft_mapped_to_init
+                ──/camera/image_raw───────────────────────────────┘
+                ──/joint_states──> wheel_encoder ──/wheel/encoder, /wheel/odom, /sim/slip
+                ──/ground_truth/odom──> scenario_runner ──/cmd_vel──> Gazebo (lái robot)
+       ========================================================================== -->
+
+  <!-- ===== 1. THAM SỐ DÒNG LỆNH (ghi đè bằng ten:=giatri) ===== -->
+  <!-- Giao diện -->
+  <arg name="gui" default="true"/>             <!-- true: mở cửa sổ Gazebo (nặng vì vẽ bằng CPU) -->
+  <arg name="rviz" default="false"/>           <!-- true: mở RViz xem LiDAR, camera, quỹ đạo -->
+  <!-- Thành phần chạy kèm -->
+  <arg name="scenario" default="false"/>       <!-- true: robot tự chạy kịch bản config/scenario.yaml -->
+  <arg name="kilvo" default="false"/>          <!-- true: chạy KILVO (launch/kilvo_agv.launch) -->
+  <arg name="record" default="false"/>         <!-- true: ghi quỹ đạo GT + KILVO + odom bánh ra file TUM -->
+  <arg name="output_dir" default=""/>          <!-- thư mục kết quả cho record (trống = /ws/results/<giờ>) -->
+  <!-- Cấu hình LiDAR mô phỏng -->
+  <arg name="gpu_lidar" default="false"/>      <!-- true: dùng gpu_ray (cần GPU chạy được trong container) -->
+  <arg name="lidar_h_samples" default="720"/>  <!-- số tia ngang / vòng; giảm để mô phỏng nhanh hơn -->
+  <arg name="lidar_v_samples" default="24"/>   <!-- số tia dọc (vùng -7°..52° kiểu Mid360) -->
+  <!-- Vị trí xuất phát của robot (mặc định: trạm sạc) -->
   <arg name="x" default="-18.0"/>
   <arg name="y" default="4.0"/>
   <arg name="yaw" default="0.0"/>
 
+  <!-- Mọi node dùng thời gian mô phỏng (/clock) thay vì đồng hồ máy -->
   <param name="/use_sim_time" value="true"/>
 
+  <!-- ===== 2. GAZEBO + THẾ GIỚI NHÀ XƯỞNG ===== -->
+  <!-- worlds/warehouse.world được sinh từ config/layout.yaml bằng tools/generate_world.py -->
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(find kilvo_agv_gazebo)/worlds/warehouse.world"/>
     <arg name="gui" value="$(arg gui)"/>
@@ -24,23 +45,36 @@
     <arg name="use_sim_time" value="true"/>
   </include>
 
+  <!-- ===== 3. ROBOT AGV ===== -->
+  <!-- 3a. Dựng mô hình URDF từ xacro (truyền tham số LiDAR vào) -->
   <param name="robot_description"
          command="$(find xacro)/xacro $(find kilvo_agv_gazebo)/urdf/agv.urdf.xacro gpu:=$(arg gpu_lidar) lidar_h_samples:=$(arg lidar_h_samples) lidar_v_samples:=$(arg lidar_v_samples)"/>
+  <!-- 3b. Xuất TF giữa các link của robot (base_link -> lidar_link, camera_link, imu_link...) -->
   <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher"/>
+  <!-- 3c. Thả robot vào Gazebo; z = 0.105 vì base_link nằm ở tâm trục bánh (bánh r = 0.10 m) -->
   <node pkg="gazebo_ros" type="spawn_model" name="spawn_agv" output="screen"
         args="-urdf -param robot_description -model agv -x $(arg x) -y $(arg y) -z 0.105 -Y $(arg yaw)"/>
 
+  <!-- ===== 4. NODE XỬ LÝ CẢM BIẾN (luôn chạy) ===== -->
+  <!-- 4a. PointCloud2 của Gazebo -> livox_ros_driver/CustomMsg (/livox/lidar) cho KILVO đọc -->
   <node pkg="kilvo_agv_gazebo" type="lidar_to_livox" name="lidar_to_livox" output="screen"/>
+  <!-- 4b. Góc bánh -> encoder lượng tử, odometry bánh (/wheel/odom), nhãn trượt thật (/sim/slip) -->
   <node pkg="kilvo_agv_gazebo" type="wheel_encoder.py" name="wheel_encoder" output="screen"/>
 
+  <!-- ===== 5. KỊCH BẢN TỰ ĐỘNG (scenario:=true) ===== -->
+  <!-- Lái robot theo các bước trong config/scenario.yaml, điều khiển vòng kín theo ground truth -->
   <node if="$(arg scenario)" pkg="kilvo_agv_gazebo" type="scenario_runner.py" name="scenario_runner" output="screen"/>
 
+  <!-- ===== 6. KILVO (kilvo:=true) ===== -->
   <include if="$(arg kilvo)" file="$(find kilvo_agv_gazebo)/launch/kilvo_agv.launch"/>
 
+  <!-- ===== 7. GHI QUỸ ĐẠO (record:=true) ===== -->
+  <!-- Ghi ground truth + các topic odometry ra file .tum; đánh giá bằng scripts/eval_ate.py -->
   <node if="$(arg record)" pkg="kilvo_agv_gazebo" type="traj_recorder.py" name="traj_recorder" output="screen" required="false">
     <param name="output_dir" value="$(arg output_dir)"/>
     <rosparam param="estimate_topics">['/aft_mapped_to_init', '/wheel/odom']</rosparam>
   </node>
 
+  <!-- ===== 8. RVIZ (rviz:=true) ===== -->
   <node if="$(arg rviz)" pkg="rviz" type="rviz" name="rviz_sim" args="-d $(find kilvo_agv_gazebo)/rviz/sim.rviz"/>
 </launch>

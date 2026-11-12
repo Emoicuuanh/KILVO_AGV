@@ -14,6 +14,7 @@
 class LidarToLivox
 {
 public:
+  // ===== KHỞI TẠO: đọc tham số (~ = riêng của node), tạo publisher/subscriber =====
   explicit LidarToLivox(ros::NodeHandle &nh, ros::NodeHandle &pnh)
   {
     pnh.param<std::string>("input_topic", in_topic_, "/lidar/points");
@@ -28,8 +29,10 @@ public:
   }
 
 private:
+  // ===== CALLBACK: nhận 1 vòng quét PointCloud2 -> đổi sang 1 CustomMsg =====
   void cb(const sensor_msgs::PointCloud2ConstPtr &msg)
   {
+    // --- B1. Kiểm tra cloud có trường ring/intensity không (velodyne plugin có cả hai) ---
     bool has_ring = false, has_int = false;
     for (const auto &f : msg->fields)
     {
@@ -37,18 +40,21 @@ private:
       if (f.name == "intensity") has_int = true;
     }
     const size_t n = size_t(msg->width) * msg->height;
+    // --- B2. Header của gói Livox: timebase = thời điểm quét (ns) ---
     livox_ros_driver::CustomMsg out;
     out.header = msg->header;
     out.timebase = msg->header.stamp.toNSec();
     out.lidar_id = 0;
     out.points.reserve(n);
 
+    // --- B3. Iterator đọc từng trường của PointCloud2 ---
     sensor_msgs::PointCloud2ConstIterator<float> ix(*msg, "x"), iy(*msg, "y"), iz(*msg, "z");
     std::unique_ptr<sensor_msgs::PointCloud2ConstIterator<float>> ii;
     std::unique_ptr<sensor_msgs::PointCloud2ConstIterator<uint16_t>> ir;
     if (has_int) ii.reset(new sensor_msgs::PointCloud2ConstIterator<float>(*msg, "intensity"));
     if (has_ring) ir.reset(new sensor_msgs::PointCloud2ConstIterator<uint16_t>(*msg, "ring"));
 
+    // --- B4. Duyệt từng điểm: bỏ điểm NaN/quá gần, chép sang CustomPoint ---
     const double r2min = min_range_ * min_range_;
     for (size_t k = 0; k < n; ++k, ++ix, ++iy, ++iz)
     {
@@ -63,7 +69,8 @@ private:
       p.x = x; p.y = y; p.z = z;
       p.reflectivity = static_cast<uint8_t>(std::min(255.f, std::max(0.f, inten)));
       p.tag = 0x10;  // "normal point" như Livox
-      p.line = static_cast<uint8_t>(ring % n_lines_);
+      p.line = static_cast<uint8_t>(ring % n_lines_);  // KILVO chỉ nhận line < scan_line (=4)
+      // offset_time: thời gian của điểm so với đầu vòng quét (ns). Mặc định 0 (quét tức thời).
       if (time_mode_ == "azimuth")
       {
         const double az = std::atan2(y, x) + M_PI;  // [0, 2pi)
@@ -73,13 +80,16 @@ private:
         p.offset_time = 0;
       out.points.push_back(p);
     }
+    // --- B5. (chế độ azimuth) sắp xếp điểm theo thời gian như dữ liệu Livox thật ---
     if (time_mode_ == "azimuth")
       std::sort(out.points.begin(), out.points.end(),
                 [](const livox_ros_driver::CustomPoint &a, const livox_ros_driver::CustomPoint &b) { return a.offset_time < b.offset_time; });
+    // --- B6. Xuất gói ---
     out.point_num = out.points.size();
     pub_.publish(out);
   }
 
+  // ===== THAM SỐ & KÊNH ROS =====
   std::string in_topic_, out_topic_, time_mode_;
   double scan_period_, min_range_;
   int n_lines_;
@@ -87,6 +97,7 @@ private:
   ros::Subscriber sub_;
 };
 
+// ===== MAIN: khởi tạo node và chờ dữ liệu =====
 int main(int argc, char **argv)
 {
   ros::init(argc, argv, "lidar_to_livox");

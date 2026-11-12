@@ -9,14 +9,18 @@
   Bánh: r = 0.10 m, khoảng cách 2 bánh = 0.50 m.
 -->
 <robot name="agv" xmlns:xacro="http://www.ros.org/wiki/xacro">
-  <xacro:arg name="lidar_h_samples" default="720"/>
-  <xacro:arg name="lidar_v_samples" default="24"/>
-  <xacro:arg name="gpu" default="false"/>
+  <!-- ===== 0. THAM SỐ (truyền từ sim.launch) và HẰNG SỐ ===== -->
+  <xacro:arg name="lidar_h_samples" default="720"/>   <!-- số tia ngang mỗi vòng quét -->
+  <xacro:arg name="lidar_v_samples" default="24"/>    <!-- số tia dọc -->
+  <xacro:arg name="gpu" default="false"/>             <!-- true: LiDAR tính bằng GPU (gpu_ray) -->
 
-  <xacro:property name="r" value="0.10"/>
-  <xacro:property name="sep" value="0.50"/>
+  <xacro:property name="r" value="0.10"/>             <!-- bán kính bánh (m) -->
+  <xacro:property name="sep" value="0.50"/>           <!-- khoảng cách 2 bánh chủ động (m) -->
   <xacro:property name="PI" value="3.14159265"/>
 
+  <!-- ===== 1. THÂN XE base_link =====
+       Gốc tọa độ đặt tại tâm trục bánh. Gồm: khối lượng/quán tính, hộp thân xe,
+       2 bánh tự lựa (quả cầu, ma sát 0) và cột gắn LiDAR (chỉ để nhìn). -->
   <link name="base_link">
     <inertial>
       <origin xyz="0 0 0.125"/>
@@ -50,6 +54,10 @@
     </visual>
   </link>
 
+  <!-- ===== 2. HAI BÁNH CHỦ ĐỘNG =====
+       Macro tạo 1 bánh: link hình trụ + khớp quay liên tục (continuous) + ma sát với sàn.
+       Khớp xoay -90° quanh x để trục hình trụ nằm ngang theo trục y của xe.
+       mu1/mu2 = 1.0: ma sát bánh; trên tấm sàn trơn (mu 0.06) Gazebo lấy giá trị nhỏ hơn -> trượt. -->
   <xacro:macro name="wheel" params="side y">
     <link name="${side}_wheel">
       <inertial>
@@ -80,7 +88,9 @@
   <xacro:wheel side="left" y="${sep/2}"/>
   <xacro:wheel side="right" y="${-sep/2}"/>
 
-  <!-- Khung cảm biến -->
+  <!-- ===== 3. KHUNG TỌA ĐỘ CẢM BIẾN (gắn cứng vào base_link) =====
+       Vị trí ở đây PHẢI khớp với ngoại tham số trong config/kilvo_agv_sim.yaml.
+       camera_optical_frame: quy ước ảnh ROS (z nhìn tới, x sang phải, y xuống dưới). -->
   <link name="imu_link"/>
   <joint name="imu_joint" type="fixed">
     <parent link="base_link"/><child link="imu_link"/>
@@ -114,12 +124,15 @@
     <origin xyz="0 0 0" rpy="${-PI/2} 0 ${-PI/2}"/>
   </joint>
 
+  <!-- ===== 4. PLUGIN GAZEBO: CẢM BIẾN ===== -->
+  <!-- Ma sát 0 cho mọi va chạm của thân xe (gồm 2 bánh tự lựa) -->
   <gazebo reference="base_link">
     <mu1>0.0</mu1><mu2>0.0</mu2>
     <material>Gazebo/Orange</material>
   </gazebo>
 
-  <!-- IMU (đã gồm trọng lực, đơn vị m/s^2) -->
+  <!-- 4a. IMU -> /imu/data (200 Hz). Gia tốc đã gồm trọng lực, đơn vị m/s^2.
+       Nhiễu: gyro 0.002 rad/s, gia tốc 0.02 m/s^2, kèm bias ngẫu nhiên (giống IMU MEMS). -->
   <gazebo reference="imu_link">
     <sensor name="imu" type="imu">
       <always_on>true</always_on>
@@ -148,7 +161,9 @@
     </sensor>
   </gazebo>
 
-  <!-- LiDAR 3D: vùng nhìn kiểu Mid360, xuất PointCloud2 (velodyne plugin) -> node lidar_to_livox -> /livox/lidar -->
+  <!-- 4b. LiDAR 3D -> /lidar/points (PointCloud2, 10 Hz), sau đó node lidar_to_livox đổi sang /livox/lidar.
+       Vùng nhìn giống Livox Mid360: ngang 360°, dọc -7°..52° (-0.1222..0.9076 rad), tầm 0.1..40 m.
+       Khối xacro:if chọn bản CPU (ray) hoặc GPU (gpu_ray) theo tham số gpu. -->
   <gazebo reference="lidar_link">
     <xacro:if value="$(arg gpu)">
       <xacro:property name="ray_type" value="gpu_ray"/>
@@ -180,7 +195,8 @@
     </sensor>
   </gazebo>
 
-  <!-- Camera -->
+  <!-- 4c. Camera -> /camera/image_raw + /camera/camera_info (640x480, 20 Hz, góc ngang 1.25 rad).
+       Ảnh gắn frame camera_optical_frame; thông số nội tại ở config/camera_agv_sim.yaml. -->
   <gazebo reference="camera_link">
     <sensor name="camera" type="camera">
       <always_on>true</always_on>
@@ -201,8 +217,10 @@
     </sensor>
   </gazebo>
 
+  <!-- ===== 5. PLUGIN GAZEBO: DẪN ĐỘNG + GROUND TRUTH ===== -->
   <gazebo>
-    <!-- Dẫn động vi sai. Odometry của plugin KHÔNG dùng cho thuật toán; encoder -> node wheel_encoder -->
+    <!-- 5a. Dẫn động vi sai: nhận /cmd_vel, quay 2 bánh, xuất góc bánh ra /joint_states.
+         Odometry của plugin (diffdrive/odom) KHÔNG dùng cho thuật toán; encoder chuẩn do node wheel_encoder tính. -->
     <plugin name="diff_drive" filename="libgazebo_ros_diff_drive.so">
       <commandTopic>cmd_vel</commandTopic>
       <odometryTopic>diffdrive/odom</odometryTopic>
@@ -223,7 +241,8 @@
       <rosDebugLevel>na</rosDebugLevel>
     </plugin>
 
-    <!-- Ground truth tư thế base_link trong world -->
+    <!-- 5b. Ground truth: tư thế thật của base_link trong world -> /ground_truth/odom (100 Hz).
+         Dùng để điều khiển kịch bản, gán nhãn trượt và đánh giá sai số. -->
     <plugin name="ground_truth" filename="libgazebo_ros_p3d.so">
       <alwaysOn>true</alwaysOn>
       <updateRate>100.0</updateRate>

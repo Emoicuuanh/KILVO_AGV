@@ -24,7 +24,12 @@ from agv_common import wrap, yaw_from_quat
 
 
 class WheelEncoder:
+    # ===== KHỞI TẠO =====
     def __init__(self):
+        # --- Tham số (đặt qua _ten:=giatri hoặc <param> trong launch) ---
+        #   ticks_per_rev: số xung/vòng của encoder; rate: tần số xuất (Hz)
+        #   wheel_radius/separation: giá trị THẬT của robot mô phỏng
+        #   radius_scale_*/separation_scale: hệ số sai lệch "danh định" để giả lập hiệu chuẩn sai (vd. bánh mòn)
         g = lambda n, d: rospy.get_param("~" + n, d)  # noqa: E731
         self.lj, self.rj = g("left_joint", "left_wheel_joint"), g("right_joint", "right_wheel_joint")
         self.cpr = int(g("ticks_per_rev", 4096))
@@ -35,18 +40,23 @@ class WheelEncoder:
         self.b = self.b_true * g("separation_scale", 1.0)
         self.slip_thr = g("slip_threshold", 0.05)
         self.tfb = tf2_ros.TransformBroadcaster() if g("publish_gt_tf", True) else None
+        # --- Publisher: các topic đầu ra ---
         self.pub_enc = rospy.Publisher("/wheel/encoder", JointState, queue_size=50)
         self.pub_tw = rospy.Publisher("/wheel/twist", TwistWithCovarianceStamped, queue_size=50)
         self.pub_odom = rospy.Publisher("/wheel/odom", Odometry, queue_size=50)
         self.pub_slip = rospy.Publisher("/sim/slip", Float32MultiArray, queue_size=50)
-        self.gt_t, self.gt_pose = [], []
-        self.last = None
-        self.x = self.y = self.th = 0.0
+        # --- Trạng thái ---
+        self.gt_t, self.gt_pose = [], []   # bộ đệm ground truth (thời gian, (x, y, yaw)) để nội suy
+        self.last = None                   # mẫu encoder trước: (t, xung trái, xung phải, pose GT)
+        self.x = self.y = self.th = 0.0    # tư thế odometry bánh (dead-reckoning)
         self.odom_init = False
         self.last_tf = -1.0
+        # --- Subscriber: đầu vào ---
         rospy.Subscriber("/ground_truth/odom", Odometry, self.cb_gt, queue_size=200)
         rospy.Subscriber("/joint_states", JointState, self.cb_joint, queue_size=100)
 
+    # ===== NHẬN GROUND TRUTH =====
+    # Lưu vào bộ đệm; lần đầu dùng làm điểm xuất phát của odometry bánh; xuất TF world->base_link.
     def cb_gt(self, m):
         t = m.header.stamp.to_sec()
         pose = (m.pose.pose.position.x, m.pose.pose.position.y, yaw_from_quat(m.pose.pose.orientation))
@@ -74,6 +84,7 @@ class WheelEncoder:
             tf.transform.rotation = m.pose.pose.orientation
             self.tfb.sendTransform(tf)
 
+    # ===== NỘI SUY GROUND TRUTH tại thời điểm t (GT 100 Hz, encoder 50 Hz không trùng nhịp) =====
     def gt_at(self, t):
         if not self.gt_t or t < self.gt_t[0] or t > self.gt_t[-1] + 0.05:
             return None
@@ -87,7 +98,9 @@ class WheelEncoder:
         p0, p1 = self.gt_pose[i - 1], self.gt_pose[i]
         return (p0[0] + a * (p1[0] - p0[0]), p0[1] + a * (p1[1] - p0[1]), wrap(p0[2] + a * wrap(p1[2] - p0[2])))
 
+    # ===== NHẬN GÓC BÁNH -> ENCODER, ODOMETRY, NHÃN TRƯỢT =====
     def cb_joint(self, m):
+        # --- B1. Đổi góc bánh (rad) thành số xung nguyên (giả lập độ phân giải encoder) ---
         if not self.odom_init or self.lj not in m.name or self.rj not in m.name:
             return
         il, ir = m.name.index(self.lj), m.name.index(self.rj)
@@ -100,8 +113,10 @@ class WheelEncoder:
         dt = t - self.last[0]
         if dt < self.period - 1e-4:
             return
+        # --- B2. Vận tốc góc bánh từ chênh lệch xung giữa 2 mẫu ---
         dql, dqr = (tl - self.last[1]) / k, (tr - self.last[2]) / k
         wl, wr = dql / dt, dqr / dt
+        # --- B3. Động học vi sai: quãng đường 2 bánh -> tiến ds, quay dth -> cộng dồn tư thế ---
         dsl, dsr = dql * self.rl, dqr * self.rr
         ds, dth = 0.5 * (dsl + dsr), (dsr - dsl) / self.b
         self.x += ds * math.cos(self.th + 0.5 * dth)
@@ -109,6 +124,8 @@ class WheelEncoder:
         self.th = wrap(self.th + dth)
         v_enc, w_enc = ds / dt, dth / dt
 
+        # --- B4. Nhãn trượt thật: so tốc độ mặt bánh (r*omega) với tốc độ thật của điểm tiếp xúc ---
+        #     slip > 0: bánh quay nhanh hơn xe thực đi (quay trơn); flag = 1 nếu vượt ngưỡng
         gt0, gt1 = self.last[3], self.gt_at(t)
         if gt0 is not None and gt1 is not None:
             dx, dy = gt1[0] - gt0[0], gt1[1] - gt0[1]
@@ -120,6 +137,7 @@ class WheelEncoder:
             self.pub_slip.publish(Float32MultiArray(data=[v_enc, w_enc, v_gt, w_gt, sl, sr, flag]))
         self.last = (t, tl, tr, gt1)
 
+        # --- B5. Xuất /wheel/encoder (góc đã lượng tử + vận tốc góc bánh) ---
         js = JointState()
         js.header.stamp = m.header.stamp
         js.header.frame_id = "base_link"
@@ -128,6 +146,7 @@ class WheelEncoder:
         js.velocity = [wl, wr]
         self.pub_enc.publish(js)
 
+        # --- B6. Xuất /wheel/twist: vận tốc thân xe + hiệp phương sai (vy, vz, wx, wy ~ 0 do không holonomic, phẳng) ---
         tw = TwistWithCovarianceStamped()
         tw.header = js.header
         tw.twist.twist.linear.x = v_enc
@@ -139,6 +158,7 @@ class WheelEncoder:
         tw.twist.covariance = cov
         self.pub_tw.publish(tw)
 
+        # --- B7. Xuất /wheel/odom: tư thế dead-reckoning chỉ từ encoder (baseline để so sánh) ---
         od = Odometry()
         od.header.stamp = m.header.stamp
         od.header.frame_id = "world"
@@ -149,6 +169,7 @@ class WheelEncoder:
         self.pub_odom.publish(od)
 
 
+# ===== MAIN =====
 if __name__ == "__main__":
     rospy.init_node("wheel_encoder")
     WheelEncoder()

@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# kros — chạy lệnh ROS 1 (Noetic) trong container kilvo-sim như chạy trên máy thật.
+#
+#   kros roslaunch kilvo_agv_gazebo sim.launch      # chưa có container -> mở mới
+#   kros rosrun teleop_twist_keyboard teleop_twist_keyboard.py   # container đang chạy -> vào chung
+#   kros rostopic list
+#   kros catkin_make                                # build lại workspace
+#   kros                                            # mở shell bash bên trong container
+#   kros stop                                       # tắt container
+#   kros status                                     # container có đang chạy không
+set -e
+
+# ===== 1. ĐƯỜNG DẪN & TÊN CONTAINER (SELF: file thật, kể cả khi gọi qua symlink ~/.local/bin/kros) =====
+SELF="$(readlink -f "$0")"
+WS="$(cd "$(dirname "$SELF")/.." && pwd)"
+NAME="${CONTAINER_NAME:-kilvo_sim}"
+
+# Hàm kiểm tra: container có đang chạy không
+running() { [ "$(docker ps -q -f "name=^${NAME}$")" != "" ]; }
+
+# ===== 2. LỆNH RIÊNG CỦA kros: stop / status =====
+case "${1:-}" in
+  stop)
+    if running; then docker stop "$NAME" >/dev/null && echo "Đã tắt $NAME"; else echo "$NAME không chạy"; fi
+    exit 0 ;;
+  status)
+    if running; then echo "$NAME đang chạy"; else echo "$NAME không chạy"; fi
+    exit 0 ;;
+esac
+
+# ===== 3. CẤP QUYỀN HIỆN CỬA SỔ =====
+# Cho container vẽ cửa sổ lên màn hình (chỉ user hiện tại)
+if [ -n "${DISPLAY:-}" ] && command -v xhost >/dev/null; then
+  xhost +SI:localuser:"$(id -un)" >/dev/null 2>&1 || true
+fi
+
+# Chế độ tương tác (-it) chỉ khi đang gõ từ terminal
+TTY=()
+[ -t 0 ] && [ -t 1 ] && TTY=(-it)
+
+# ===== 4. CHẠY LỆNH =====
+# Container đang chạy -> docker exec vào chung; chưa chạy -> run.sh mở container mới
+if running; then
+  # Vào container đang chạy, cùng ROS master
+  exec docker exec "${TTY[@]}" --user "$(id -u):$(id -g)" \
+    -e HOME=/ws/.home -e DISPLAY="${DISPLAY:-:0}" -e QT_X11_NO_MITSHM=1 -w /ws "$NAME" \
+    bash -c 'source /opt/ros/noetic/setup.bash; [ -f /ws/devel/setup.bash ] && source /ws/devel/setup.bash; if [ $# -gt 0 ]; then exec "$@"; else exec bash; fi' _ "$@"
+else
+  exec env CONTAINER_NAME="$NAME" "$WS/docker/run.sh" "$@"
+fi

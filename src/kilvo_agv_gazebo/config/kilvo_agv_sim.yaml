@@ -1,6 +1,8 @@
 # KILVO gốc trên AGV mô phỏng (Gazebo 11). Dựa trên config/mid360_d455.yaml của tác giả;
 # chỉ đổi topic, ngoại tham số, và TẮT động học chân (AGV không có chân -> chế độ LIVO).
 # Phần thay động học chân bằng động học vi sai/encoder là đóng góp của bài báo (làm sau).
+# ===== 1. CHUNG: topic đầu vào và bật/tắt từng cảm biến =====
+# img_en/lidar_en/leg_en quyết định chế độ: cả 3 = KILVO, img+lidar = LIVO, leg+lidar = KILO
 common:
   img_topic: "/camera/image_raw"
   lid_topic: "/livox/lidar"
@@ -9,10 +11,11 @@ common:
   img_en: 1
   lidar_en: 1
   leg_en: 0
-  en_auto_mode: false
-  gravity_align_en: true
+  en_auto_mode: false            # tự chuyển chế độ khi một cảm biến mất/suy giảm
+  gravity_align_en: true         # xoay khung bản đồ cho trục z thẳng đứng theo trọng lực
   debug_output_en: false
 
+# ===== 2. NGOẠI THAM SỐ: vị trí/hướng giữa các cảm biến (khớp urdf/agv.urdf.xacro) =====
 extrin_calib:
   # LiDAR trong khung IMU (Pil, Ril). IMU (0,0,0.10), LiDAR (0.20,0,0.55) so với base_link, cùng hướng.
   extrinsic_T: [0.20, 0.0, 0.45]
@@ -24,6 +27,7 @@ extrin_calib:
   Pcl: [0.0, -0.25, -0.22]
   extR_urdf2Lid: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
 
+# ===== 3. LỆCH THỜI GIAN giữa các cảm biến (mô phỏng đồng bộ hoàn hảo -> 0) =====
 time_offset:
   lidar_time_offset: 0.0
   imu_time_offset: 0.0
@@ -31,13 +35,15 @@ time_offset:
   leg_time_offset: 0.0
   exposure_time_init: 0.0
 
+# ===== 4. TIỀN XỬ LÝ LIDAR =====
 preprocess:
-  point_filter_num: 1
-  filter_size_surf: 0.3
+  point_filter_num: 1    # lấy 1 trên N điểm
+  filter_size_surf: 0.3  # lưới voxel lọc thưa điểm trước khi khớp (m)
   lidar_type: 1   # Livox CustomMsg (node lidar_to_livox)
   scan_line: 4
   blind: 0.6      # bỏ điểm rơi vào thân xe
 
+# ===== 5. VIO: cập nhật bằng camera (sai số quang trắc trên các patch ảnh) =====
 vio:
   max_iterations: 5
   outlier_threshold: 1000
@@ -50,22 +56,26 @@ vio:
   exposure_estimate_en: true
   inv_expo_cov: 0.1
 
+# ===== 6. IMU: khởi tạo và nhiễu dùng trong bước dự đoán =====
 imu:
   imu_en: true
-  imu_int_frame: 30
+  imu_int_frame: 30   # số frame đứng yên dùng để khởi tạo bias/trọng lực
   acc_cov: 0.5
   gyr_cov: 0.3
 
+# ===== 7. LIO: cập nhật bằng LiDAR (điểm - mặt phẳng trên bản đồ voxel) =====
 lio:
   max_iterations: 5
   dept_err: 0.02
   beam_err: 0.05
   min_eigen_value: 0.005
-  voxel_size: 0.5
+  voxel_size: 0.5        # kích thước voxel bản đồ (m)
   max_layer: 2
   max_points_num: 50
   layer_init_num: [5, 5, 5, 5, 5]
 
+# ===== 8. KIO + CONTACT: động học chân của robot hình người (KHÔNG dùng vì leg_en: 0) =====
+# Đây là phần sẽ thay bằng động học vi sai + ước lượng trượt bánh trong bài báo.
 kio:
   ankle2sole_model: 0.0
   vel_cnt_cov: [0.5, 0.5, 0.2]
@@ -83,11 +93,13 @@ contact:
   scale_k_sw2st: 13
   d_init: true
 
+# ===== 9. BẢN ĐỒ CỤC BỘ =====
 local_map:
   map_sliding_en: false
   half_map_size: 100
   sliding_thresh: 8
 
+# ===== 10. XUẤT KẾT QUẢ =====
 publish:
   dense_map_en: true
   pub_effect_point_en: false
@@ -95,6 +107,7 @@ publish:
   pub_scan_num: 1
   blind_rgb_points: 0.0
 
+# ===== 11. LƯU BẢN ĐỒ RA FILE .pcd (src/kilvo/log/PCD) =====
 pcd_save:
   pcd_save_en: false
   interval: -1

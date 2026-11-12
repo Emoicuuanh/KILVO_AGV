@@ -26,6 +26,21 @@ xhost +SI:localuser:$USER                    # cho container vẽ lên màn hìn
 ```
 Lệnh `xhost` mất tác dụng sau mỗi lần đăng nhập lại, nên phải chạy lại.
 
+## Lệnh tắt `kros`
+`kros` = "chạy lệnh ROS 1 trong container". Gõ `kros` + lệnh như bình thường:
+```bash
+ln -sf ~/kilvo_ros1_ws/docker/kros ~/.local/bin/kros   # cài 1 lần (~/.local/bin phải có trong PATH)
+
+kros roslaunch kilvo_agv_gazebo sim.launch rviz:=true   # mở mô phỏng
+kros rosrun teleop_twist_keyboard teleop_twist_keyboard.py   # terminal khác: lái robot
+kros rostopic list
+kros catkin_make          # build lại
+kros                      # shell bash trong container
+kros status | kros stop
+```
+- Nếu chưa có container `kilvo_sim` đang chạy, `kros` mở container mới và tự chạy `xhost`.
+- Nếu container đang chạy, `kros` vào chung container đó (cùng ROS master).
+
 ## Chạy
 ```bash
 # Gazebo có giao diện, lái tay

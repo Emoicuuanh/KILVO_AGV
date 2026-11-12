@@ -23,8 +23,9 @@ def clamp(v, lo, hi):
 
 
 class ScenarioRunner:
-    DT = 0.02
+    DT = 0.02  # chu kỳ điều khiển 50 Hz
 
+    # ===== KHỞI TẠO: đọc kịch bản + layout, tạo topic, hẹn giờ điều khiển =====
     def __init__(self):
         sf = rospy.get_param("~scenario_file", "") or os.path.join(PKG, "config", "scenario.yaml")
         with open(sf) as f:
@@ -33,22 +34,26 @@ class ScenarioRunner:
         self.steps = self.sc["steps"]
         self.v_def = self.sc.get("default_speed", 1.0)
         self.acc = self.sc.get("accel", 0.6)
+        # --- Đầu ra: lệnh vận tốc + nhãn để phân tích ---
         self.pub_cmd = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
         self.pub_zone = rospy.Publisher("/sim/zone", String, queue_size=10)
         self.pub_step = rospy.Publisher("/sim/step", String, queue_size=10, latch=True)
         self.pub_done = rospy.Publisher("/sim/scenario_done", Bool, queue_size=1, latch=True)
-        self.pose = None
-        self.idx = -1
+        # --- Trạng thái ---
+        self.pose = None   # (x, y, yaw) thật từ ground truth
+        self.idx = -1      # chỉ số bước đang chạy (-1 = đang chờ start_delay)
         self.st = {}
         self.v_cmd = self.w_cmd = 0.0
         self.prev_xy = None
         self.t_start = None
         self.done = False
+        # --- Đầu vào + 2 bộ hẹn giờ: điều khiển (50 Hz) và xuất nhãn vùng (10 Hz) ---
         rospy.Subscriber("/ground_truth/odom", Odometry, self.cb_gt, queue_size=50)
         rospy.Timer(rospy.Duration(self.DT), self.tick)
         rospy.Timer(rospy.Duration(0.1), self.pub_zones)
         rospy.loginfo("Kịch bản %s: %d bước", sf, len(self.steps))
 
+    # ===== TIỆN ÍCH: nhận GT, xuất vùng, gửi lệnh, giới hạn gia tốc =====
     def cb_gt(self, m):
         p = m.pose.pose
         self.pose = (p.position.x, p.position.y, yaw_from_quat(p.orientation))
@@ -67,6 +72,7 @@ class ScenarioRunner:
         dv = self.acc * self.DT
         return clamp(v_target, self.v_cmd - dv, self.v_cmd + dv)
 
+    # ===== CHUYỂN SANG BƯỚC KẾ TIẾP (hết bước -> dừng xe, báo /sim/scenario_done) =====
     def next_step(self):
         self.idx += 1
         if self.idx >= len(self.steps):
@@ -84,6 +90,7 @@ class ScenarioRunner:
         self.pub_step.publish(String(data=label))
         rospy.loginfo("[%d/%d] %s", self.idx + 1, len(self.steps), label)
 
+    # ===== VÒNG ĐIỀU KHIỂN 50 Hz: chờ khởi động, rồi gọi hàm của bước hiện tại =====
     def tick(self, _):
         if self.pose is None or self.done:
             return
@@ -115,6 +122,8 @@ class ScenarioRunner:
         if fin:
             self.next_step()
 
+    # ===== CÁC THAO TÁC CƠ BẢN (mỗi hàm trả True khi bước đã xong) =====
+    # face: quay tại chỗ tới hướng yaw
     def do_face(self, yaw, th):
         err = wrap(yaw - th)
         if abs(err) < 0.02 and abs(self.w_cmd) < 0.3:
@@ -123,6 +132,8 @@ class ScenarioRunner:
         self.send(self.ramp(0.0), clamp(1.5 * err, -0.8, 0.8))
         return False
 
+    # goto: pha 0 quay về hướng đích; pha 1 chạy thẳng, bám đường nối điểm trước -> đích (kiểu Stanley),
+    #       giảm tốc khi gần đích, dừng hẳn tại đích
     def do_goto(self, s, x, y, th):
         gx, gy = s["goto"]
         fx, fy = self.st["from"]
@@ -145,6 +156,7 @@ class ScenarioRunner:
             return True
         return False
 
+    # spin: quay tại chỗ đủ số vòng (cộng dồn góc đã quay), chậm lại ở cuối
     def do_spin(self, s, th):
         turns = s["spin"]
         w = abs(s.get("w", 1.0)) * (1 if turns >= 0 else -1)
@@ -158,6 +170,7 @@ class ScenarioRunner:
         self.send(0.0, w if remain > 0.4 else w * max(remain / 0.4, 0.15))
         return False
 
+    # dash: tăng tốc mạnh (1.5 m/s^2) đi thẳng một đoạn rồi PHANH GẤP (lệnh 0 tức thời) -> gây trượt
     def do_dash(self, d, x, y):
         sx, sy, _ = self.st["start"]
         if self.st["phase"] == 0:
@@ -174,6 +187,7 @@ class ScenarioRunner:
         return True
 
 
+# ===== MAIN =====
 if __name__ == "__main__":
     rospy.init_node("scenario_runner")
     n = ScenarioRunner()

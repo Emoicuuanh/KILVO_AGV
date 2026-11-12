@@ -14,11 +14,14 @@ import yaml
 PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+# ===== HÀM DỰNG KHỐI SDF =====
+# Vật liệu màu (r, g, b)
 def mat(r, g, b):
     return (f"<material><ambient>{r} {g} {b} 1</ambient><diffuse>{r} {g} {b} 1</diffuse>"
             f"<specular>0.1 0.1 0.1 1</specular></material>")
 
 
+# 1 hộp: visual (hình) + collision (va chạm, tùy chọn ma sát mu)
 def box(name, x, y, z, sx, sy, sz, color, collide=True, mu=None, yaw=0.0):
     pose = f"<pose>{x:.4f} {y:.4f} {z:.4f} 0 0 {yaw:.4f}</pose>"
     geom = f"<geometry><box><size>{sx:.4f} {sy:.4f} {sz:.4f}</size></box></geometry>"
@@ -31,10 +34,12 @@ def box(name, x, y, z, sx, sy, sz, color, collide=True, mu=None, yaw=0.0):
     return out
 
 
+# Gói nhiều hộp vào 1 model tĩnh (không di chuyển)
 def static_model(name, body):
     return f'<model name="{name}"><static>true</static><link name="link">{body}</link></model>\n'
 
 
+# Vị trí mã QR: rải đều theo các đoạn trong layout (giống scripts/agv_common.py)
 def qr_positions(qr):
     pts = []
     for x0, y0, x1, y1, step in qr["lines"]:
@@ -52,6 +57,7 @@ def qr_positions(qr):
     return out
 
 
+# ===== DỰNG TOÀN BỘ THẾ GIỚI từ layout =====
 def build(cfg, seed, classic=False):
     rng = random.Random(seed)
     hall = cfg["hall"]
@@ -129,7 +135,7 @@ def build(cfg, seed, classic=False):
                      (0.6, 0.45, 0.25), yaw=rng.uniform(-0.2, 0.2))
     models.append(static_model("clutter", b))
 
-    # ---------- đèn ----------
+    # ---------- đèn: lưới đèn điểm trong các vùng sáng; vùng tối không có đèn ----------
     lc = cfg["lighting"]
     lights = ""
     n = 0
@@ -150,6 +156,7 @@ def build(cfg, seed, classic=False):
 
     amb = lc["ambient"]
     cs0 = cfg["qr"]["charging_station"]
+    # ---------- ghép file: Gazebo 11 (classic, ROS 1) hoặc Gazebo Harmonic (bản ROS 2) ----------
     if classic:
         world = f"""<?xml version="1.0"?>
 <!-- TỰ SINH bởi tools/generate_world.py (Gazebo 11 classic) từ config/layout.yaml (seed={seed}). Đừng sửa tay. -->
@@ -209,6 +216,7 @@ def build(cfg, seed, classic=False):
     return world, n
 
 
+# ===== MAIN: đọc layout -> ghi file world =====
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--layout", default=os.path.join(PKG, "config", "layout.yaml"))

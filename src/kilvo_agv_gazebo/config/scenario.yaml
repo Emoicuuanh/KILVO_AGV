@@ -9,20 +9,26 @@
 #   dash:  {dist: m, v: m/s}  tăng tốc mạnh theo hướng hiện tại rồi PHANH GẤP (lệnh 0 tức thời)
 #   face:  góc yaw (rad)      quay tại chỗ tới hướng
 #   wait:  giây
+# ===== THÔNG SỐ CHUNG =====
 default_speed: 1.0
 accel: 0.6           # m/s^2 khi chạy bình thường
 start_delay: 5.0     # chờ các node khởi động
+# ===== CÁC BƯỚC (chạy lần lượt từ trên xuống; xuất phát tại trạm sạc -18, 4) =====
 steps:
+  # --- Chặng 1: hành lang A, kệ lặp lại -> LiDAR suy biến theo trục x ---
   - {label: "A: hanh lang ke lap lai (LiDAR suy bien)", goto: [15, 4]}
   - {goto: [18, 4]}
   - {goto: [18, 0]}
+  # --- Chặng 2: hành lang B, phanh gấp trên tấm sàn trơn -> trượt dọc ---
   - {label: "B: tiep can san tron", goto: [3.5, 0]}
   - {label: "B: phanh gap tren san tron", dash: {dist: 2.0, v: 1.5}}
   - {wait: 2.0}
   - {goto: [-18, 0]}
   - {goto: [-18, -4]}
+  # --- Chặng 3: hành lang C, nửa tây sáng -> nửa đông tối (ảnh xấu) ---
   - {label: "C: hanh lang sang -> vung toi", goto: [18, -4]}
   - {goto: [18, -10]}
+  # --- Chặng 4: khu trống phía nam, quay tại chỗ trên sàn trơn / sàn thường, phanh gấp ---
   - {label: "Khu nam: den tam san tron", goto: [-10, -10]}
   - {label: "Quay tai cho tren san tron", spin: 2, w: 1.2}
   - {goto: [0, -10]}
@@ -31,7 +37,9 @@ steps:
   - {wait: 2.0}
   - {goto: [-20, -10]}
   - {goto: [-20, 10.25]}
+  # --- Chặng 5: hành lang tường trơn -> LiDAR suy biến mạnh nhất ---
   - {label: "Hanh lang tuong tron (suy bien manh)", goto: [18, 10.25]}
   - {goto: [18, 4]}
+  # --- Chặng 6: quay về trạm sạc (đóng vòng, đo sai số cuối) ---
   - {label: "Ve tram sac", goto: [-18, 4]}
   - {face: 0.0}

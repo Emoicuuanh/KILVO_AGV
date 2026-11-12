@@ -23,6 +23,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agv_common import load_layout, qr_positions  # noqa: E402
 
 
+# ===== ĐỌC FILE & TOÁN HỌC CƠ BẢN =====
+# Đọc file TUM -> mảng (N, 8), sắp theo thời gian, bỏ mốc thời gian trùng
 def load_tum(p):
     a = np.loadtxt(p, ndmin=2)
     if a.size == 0:
@@ -32,6 +34,7 @@ def load_tum(p):
     return a[idx]
 
 
+# Quaternion (x y z w) -> ma trận quay 3x3
 def quat_to_R(q):  # q = x y z w
     x, y, z, w = q.T
     R = np.empty((len(q), 3, 3))
@@ -41,6 +44,7 @@ def quat_to_R(q):  # q = x y z w
     return R
 
 
+# Nội suy vị trí + yaw của ground truth tại các thời điểm t; ok = t nằm trong khoảng GT
 def interp(gt, t):
     ok = (t >= gt[0, 0]) & (t <= gt[-1, 0])
     p = np.stack([np.interp(t, gt[:, 0], gt[:, k]) for k in (1, 2, 3)], 1)
@@ -48,6 +52,7 @@ def interp(gt, t):
     return p, np.interp(t, gt[:, 0], yaw), ok
 
 
+# Phép quay + tịnh tiến tối ưu đưa src khớp dst (bình phương tối thiểu) — chuẩn ATE
 def umeyama(src, dst):
     ms, md = src.mean(0), dst.mean(0)
     U, _, Vt = np.linalg.svd((dst - md).T @ (src - ms))
@@ -57,12 +62,15 @@ def umeyama(src, dst):
     return R, md - R @ ms
 
 
+# ===== ĐÁNH GIÁ 1 QUỸ ĐẠO =====
 def evaluate(est, gt, layout):
+    # --- B1. Ghép cặp: GT nội suy tại thời điểm của ước lượng ---
     t = est[:, 0]
     g_p, g_yaw, ok = interp(gt, t)
     est, g_p, g_yaw, t = est[ok], g_p[ok], g_yaw[ok], t[ok]
     if len(t) < 10:
         return None
+    # --- B2. Căn chỉnh 2 kiểu: 'first' (khớp pose đầu) và 'se3' (Umeyama) ---
     e_p, e_R = est[:, 1:4], quat_to_R(est[:, 4:8])
     # căn theo pose đầu: T_align = T_gt0 * T_est0^-1 (chỉ yaw + tịnh tiến, giữ phương trọng lực)
     e_yaw = np.unwrap(np.arctan2(e_R[:, 1, 0], e_R[:, 0, 0]))
@@ -73,6 +81,7 @@ def evaluate(est, gt, layout):
     p_se3 = (R @ e_p.T).T + tr
     res = {"n": int(len(t)), "duration_s": float(t[-1] - t[0]),
            "length_m": float(np.sum(np.linalg.norm(np.diff(g_p[:, :2], axis=0), axis=1)))}
+    # --- B3. Sai số vị trí xy, z, sai số cuối, sai số yaw, độ trôi % ---
     for name, p in (("first", p_first), ("se3", p_se3)):
         exy = np.linalg.norm(p[:, :2] - g_p[:, :2], axis=1)
         ez = p[:, 2] - g_p[:, 2]
@@ -82,6 +91,7 @@ def evaluate(est, gt, layout):
     res["first"]["yaw_rmse_deg"] = float(np.degrees(np.sqrt(np.mean(((eyaw + np.pi) % (2 * np.pi) - np.pi) ** 2))))
     res["first"]["drift_pct"] = 100 * res["first"]["final_xy_m"] / max(res["length_m"], 1e-6)
 
+    # --- B4. Sai số tại mã QR ---
     # sai số tại mã QR (căn 'first'): lần robot đi qua gần tâm mã nhất trong mỗi lượt
     exy = np.linalg.norm(p_first[:, :2] - g_p[:, :2], axis=1)
     rad = layout["qr"]["capture_radius"]
@@ -98,6 +108,7 @@ def evaluate(est, gt, layout):
     if qr_err:
         q = np.array(qr_err) * 100
         res["qr"] = {"reads": len(q), "mean_cm": float(q.mean()), "max_cm": float(q.max())}
+    # --- B5. RMSE theo từng vùng (hành lang lặp, vùng tối, sàn trơn...) ---
     zones = {}
     for z in layout["zones"]:
         x0, x1, y0, y1 = z["box"]
@@ -108,6 +119,7 @@ def evaluate(est, gt, layout):
     return res, t, g_p, p_first, exy
 
 
+# ===== MAIN: đánh giá mọi file .tum, in bảng, lưu metrics.md/json, vẽ trajectory.png =====
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("dir")
@@ -133,6 +145,7 @@ def main():
     if not allres:
         sys.exit(1)
 
+    # --- Bảng kết quả ---
     lines = ["| Ước lượng | ATE xy (first) | ATE xy (se3) | Cuối xy | Trôi % | z RMSE | yaw RMSE | QR TB / max |",
              "|---|---|---|---|---|---|---|---|"]
     for e, r in allres.items():
@@ -151,6 +164,7 @@ def main():
     with open(os.path.join(a.dir, "metrics.json"), "w") as f:
         json.dump(allres, f, indent=2)
 
+    # --- Hình: bên trái quỹ đạo trên mặt bằng (kệ, vùng trơn/tối), bên phải sai số theo thời gian ---
     try:
         import matplotlib
         matplotlib.use("Agg")
