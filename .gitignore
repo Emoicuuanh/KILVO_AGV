@@ -1,0 +1,13 @@
+# catkin
+build/
+devel/
+install/
+logs/
+.catkin_tools/
+# runtime (HOME của container, kết quả chạy)
+.home/
+results/
+# logs, cache
+*.log
+__pycache__/
+*.pyc

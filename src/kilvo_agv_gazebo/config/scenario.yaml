@@ -1,0 +1,37 @@
+# Kịch bản thực nghiệm mặc định (~290 m, ~7-8 phút mô phỏng).
+# Robot được điều khiển vòng kín theo GROUND TRUTH nên quỹ đạo lặp lại y hệt giữa
+# các lần chạy -> so sánh công bằng giữa KILVO gốc / KILVO-AGV / FAST-LIO2 / ...
+#
+# Các bước:
+#   goto:  [x, y]            đi thẳng tới điểm (bám đường nối từ điểm trước), dừng tại đích
+#          v: vận tốc (m/s)  (mặc định default_speed)
+#   spin:  số vòng (âm = cùng chiều kim đồng hồ), w: rad/s     -> quay tại chỗ
+#   dash:  {dist: m, v: m/s}  tăng tốc mạnh theo hướng hiện tại rồi PHANH GẤP (lệnh 0 tức thời)
+#   face:  góc yaw (rad)      quay tại chỗ tới hướng
+#   wait:  giây
+default_speed: 1.0
+accel: 0.6           # m/s^2 khi chạy bình thường
+start_delay: 5.0     # chờ các node khởi động
+steps:
+  - {label: "A: hanh lang ke lap lai (LiDAR suy bien)", goto: [15, 4]}
+  - {goto: [18, 4]}
+  - {goto: [18, 0]}
+  - {label: "B: tiep can san tron", goto: [3.5, 0]}
+  - {label: "B: phanh gap tren san tron", dash: {dist: 2.0, v: 1.5}}
+  - {wait: 2.0}
+  - {goto: [-18, 0]}
+  - {goto: [-18, -4]}
+  - {label: "C: hanh lang sang -> vung toi", goto: [18, -4]}
+  - {goto: [18, -10]}
+  - {label: "Khu nam: den tam san tron", goto: [-10, -10]}
+  - {label: "Quay tai cho tren san tron", spin: 2, w: 1.2}
+  - {goto: [0, -10]}
+  - {label: "Quay tai cho tren san thuong", spin: -2, w: 1.2}
+  - {label: "Phanh gap tren san thuong", dash: {dist: 3.0, v: 1.5}}
+  - {wait: 2.0}
+  - {goto: [-20, -10]}
+  - {goto: [-20, 10.25]}
+  - {label: "Hanh lang tuong tron (suy bien manh)", goto: [18, 10.25]}
+  - {goto: [18, 4]}
+  - {label: "Ve tram sac", goto: [-18, 4]}
+  - {face: 0.0}

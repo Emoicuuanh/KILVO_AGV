@@ -1,0 +1,11 @@
+<launch>
+  <!-- KILVO gốc (không sửa) với config cho AGV mô phỏng — cùng cách nạp tham số như launch gốc của tác giả -->
+  <arg name="config" default="$(find kilvo_agv_gazebo)/config/kilvo_agv_sim.yaml"/>
+  <arg name="camera" default="$(find kilvo_agv_gazebo)/config/camera_agv_sim.yaml"/>
+  <arg name="rviz" default="false"/>
+  <rosparam command="load" file="$(arg config)"/>
+  <node pkg="kilvo" type="kilvo" name="laserMapping" output="screen">
+    <rosparam file="$(arg camera)"/>
+  </node>
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="rviz_kilvo" args="-d $(find kilvo)/rviz_cfg/kilvo.rviz"/>
+</launch>

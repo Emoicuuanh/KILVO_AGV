@@ -1,0 +1,66 @@
+# Bố trí nhà xưởng mô phỏng — nguồn dữ liệu duy nhất cho:
+#   tools/generate_world.py  (sinh worlds/warehouse.sdf)
+#   scenario_runner / traj_recorder (gán nhãn vùng)
+#   evaluate (sai số tại mã QR, sai số theo vùng)
+# Đơn vị: mét, radian. Gốc tọa độ world ở giữa nhà xưởng, sàn z = 0.
+
+hall:
+  x: [-22.0, 22.0]
+  y: [-13.0, 13.0]
+  wall_height: 6.0
+  floor_mu: 0.9            # hệ số ma sát sàn thường
+
+# Các dãy kệ giống hệt nhau, chạy dọc trục x -> hành lang dài, lặp lại
+# (LiDAR suy biến theo phương x, dễ định vị nhầm dãy).
+shelves:
+  x: [-15.0, 15.0]
+  rows_y: [6.0, 2.0, -2.0, -6.0]   # tâm từng dãy
+  depth: 1.0
+  height: 2.6
+  bay_length: 2.5                  # khoảng cách cột đứng
+  levels: [0.15, 0.85, 1.55, 2.25] # cao độ các tầng kệ
+  pallet_fill: 0.55                # tỉ lệ ô kệ có thùng hàng (seed cố định)
+
+# Hành lang tường trơn, không đặc trưng -> suy biến LiDAR mạnh nhất
+featureless_corridor:
+  x: [-12.0, 12.0]
+  walls_y: [9.0, 11.5]
+  height: 3.0
+
+# Đèn: chỉ đặt trong các vùng có ánh sáng; vùng tối không có đèn.
+lighting:
+  ambient: 0.04
+  height: 4.0
+  spacing: 8.0              # Gazebo 11 (OGRE 1) chậm khi có nhiều đèn
+  range: 5.5
+  lit_regions:              # [xmin, xmax, ymin, ymax]
+    - [-21, 21, 3.0, 5.0]   # hành lang A
+    - [-21, 21, -1.0, 1.0]  # hành lang B
+    - [-21, -1, -5.0, -3.0] # nửa tây hành lang C (nửa đông tối)
+    - [-21, 21, 9.5, 11.0]  # hành lang tường trơn
+    - [-21, 21, -11.0, -9.0] # khu trống phía nam
+    - [-21, -18, -9, 9]     # lối ngang phía tây
+    - [18, 21, -9, 9]       # lối ngang phía đông
+
+# Các vùng kịch bản (dùng để gán nhãn và phân tích riêng từng đoạn)
+zones:
+  - {name: aisle_A_repetitive, type: lidar_degenerate, box: [-15, 15, 3.0, 5.0]}
+  - {name: aisle_B,            type: normal,           box: [-15, 15, -1.0, 1.0]}
+  - {name: slip_patch_B,       type: slippery,         box: [-2.0, 2.0, -1.4, 1.4], mu: 0.06}
+  - {name: dark_C,             type: dark,             box: [0, 15, -5.0, -3.0]}
+  - {name: aisle_C_lit,        type: normal,           box: [-15, 0, -5.0, -3.0]}
+  - {name: featureless,        type: lidar_degenerate, box: [-12, 12, 9.0, 11.5]}
+  - {name: slip_patch_spin,    type: slippery,         box: [-11.5, -8.5, -11.5, -8.5], mu: 0.06}
+  - {name: open_south,         type: normal,           box: [-21, 21, -12.5, -7.0]}
+
+# Mã QR dưới sàn (ground truth kiểu thực tế: chỉ biết vị trí tại các điểm này)
+qr:
+  size: 0.12
+  capture_radius: 0.05      # robot "đọc" mã khi tâm robot cách mã < r
+  lines:                    # [x0, y0, x1, y1, khoảng cách]
+    - [-18, 4, 18, 4, 3.0]
+    - [-18, 0, 18, 0, 3.0]
+    - [-18, -4, 18, -4, 3.0]
+    - [-12, 10.25, 12, 10.25, 3.0]
+    - [-12, -10, 12, -10, 2.0]
+  charging_station: [-18.0, 4.0]

@@ -1,0 +1,62 @@
+Panels:
+  - Class: rviz/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz/Grid
+      Name: Grid
+      Enabled: true
+      Cell Size: 1
+      Plane Cell Count: 50
+      Reference Frame: <Fixed Frame>
+    - Class: rviz/RobotModel
+      Name: RobotModel
+      Enabled: true
+      Robot Description: robot_description
+    - Class: rviz/PointCloud2
+      Name: LiDAR (sim)
+      Enabled: true
+      Topic: /lidar/points
+      Color Transformer: AxisColor
+      Axis: Z
+      Style: Points
+      Size (Pixels): 2
+      Decay Time: 0
+    - Class: rviz/Odometry
+      Name: Ground truth
+      Enabled: true
+      Topic: /ground_truth/odom
+      Keep: 300
+      Position Tolerance: 0.2
+      Angle Tolerance: 0.3
+      Shape:
+        Value: Arrow
+        Color: 0; 0; 0
+    - Class: rviz/Odometry
+      Name: Wheel odom
+      Enabled: true
+      Topic: /wheel/odom
+      Keep: 300
+      Position Tolerance: 0.2
+      Angle Tolerance: 0.3
+      Shape:
+        Value: Arrow
+        Color: 255; 140; 0
+    - Class: rviz/Image
+      Name: Camera
+      Enabled: true
+      Image Topic: /camera/image_raw
+  Enabled: true
+  Global Options:
+    Background Color: 30; 30; 30
+    Fixed Frame: world
+    Frame Rate: 30
+  Views:
+    Current:
+      Class: rviz/Orbit
+      Distance: 25
+      Focal Point: {X: -10, Y: 2, Z: 0}
+      Pitch: 0.9
+      Yaw: 3.6
+      Target Frame: base_link

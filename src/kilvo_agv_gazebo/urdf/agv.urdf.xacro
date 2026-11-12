@@ -1,0 +1,236 @@
+<?xml version="1.0"?>
+<!--
+  AGV vi sai 2 bánh cho Gazebo 11 (ROS 1 Noetic).
+  base_link: tâm trục bánh (cao 0.10 m so với sàn). x tiến, y trái, z lên.
+  Cảm biến (khớp config/kilvo_agv_sim.yaml):
+    imu_link    0.00 0 0.10   (200 Hz)
+    lidar_link  0.20 0 0.55   (giả lập Livox Mid360: 360° x [-7°, 52°], 10 Hz)
+    camera_link 0.42 0 0.30   (640x480, 20 Hz, hfov 1.25 rad), ảnh mang frame camera_optical_frame
+  Bánh: r = 0.10 m, khoảng cách 2 bánh = 0.50 m.
+-->
+<robot name="agv" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="lidar_h_samples" default="720"/>
+  <xacro:arg name="lidar_v_samples" default="24"/>
+  <xacro:arg name="gpu" default="false"/>
+
+  <xacro:property name="r" value="0.10"/>
+  <xacro:property name="sep" value="0.50"/>
+  <xacro:property name="PI" value="3.14159265"/>
+
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0 0 0.125"/>
+      <mass value="80.0"/>
+      <inertia ixx="2.817" iyy="4.683" izz="6.667" ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.125"/>
+      <geometry><box size="0.8 0.6 0.25"/></geometry>
+      <material name="orange"><color rgba="0.9 0.55 0.05 1"/></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.125"/>
+      <geometry><box size="0.8 0.6 0.25"/></geometry>
+    </collision>
+    <!-- bánh tự lựa: cầu, ma sát 0 (xem <gazebo reference="base_link">) -->
+    <!-- đáy bánh tự lựa cao hơn sàn 4 mm -> trọng lượng dồn lên 2 bánh chủ động (bám sàn),
+         bánh tự lựa chỉ đỡ khi xe chúi (phanh/tăng tốc) -->
+    <collision>
+      <origin xyz="0.30 0 -0.046"/>
+      <geometry><sphere radius="0.05"/></geometry>
+    </collision>
+    <collision>
+      <origin xyz="-0.30 0 -0.046"/>
+      <geometry><sphere radius="0.05"/></geometry>
+    </collision>
+    <visual>
+      <origin xyz="0.2 0 0.40"/>
+      <geometry><cylinder radius="0.03" length="0.20"/></geometry>
+      <material name="dark"><color rgba="0.2 0.2 0.2 1"/></material>
+    </visual>
+  </link>
+
+  <xacro:macro name="wheel" params="side y">
+    <link name="${side}_wheel">
+      <inertial>
+        <mass value="2.0"/>
+        <inertia ixx="0.00542" iyy="0.00542" izz="0.01" ixy="0" ixz="0" iyz="0"/>
+      </inertial>
+      <visual>
+        <geometry><cylinder radius="${r}" length="0.05"/></geometry>
+        <material name="black"><color rgba="0.05 0.05 0.05 1"/></material>
+      </visual>
+      <collision>
+        <geometry><cylinder radius="${r}" length="0.05"/></geometry>
+      </collision>
+    </link>
+    <joint name="${side}_wheel_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="${side}_wheel"/>
+      <origin xyz="0 ${y} 0" rpy="${-PI/2} 0 0"/>
+      <axis xyz="0 0 1"/>
+    </joint>
+    <gazebo reference="${side}_wheel">
+      <mu1>1.0</mu1><mu2>1.0</mu2>
+      <kp>1e6</kp><kd>100</kd>
+      <minDepth>0.001</minDepth>
+      <material>Gazebo/Black</material>
+    </gazebo>
+  </xacro:macro>
+  <xacro:wheel side="left" y="${sep/2}"/>
+  <xacro:wheel side="right" y="${-sep/2}"/>
+
+  <!-- Khung cảm biến -->
+  <link name="imu_link"/>
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/><child link="imu_link"/>
+    <origin xyz="0 0 0.10"/>
+  </joint>
+
+  <link name="lidar_link">
+    <visual>
+      <geometry><cylinder radius="0.05" length="0.07"/></geometry>
+      <material name="black"/>
+    </visual>
+  </link>
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/><child link="lidar_link"/>
+    <origin xyz="0.20 0 0.55"/>
+  </joint>
+
+  <link name="camera_link">
+    <visual>
+      <geometry><box size="0.04 0.10 0.04"/></geometry>
+      <material name="blue"><color rgba="0.1 0.1 0.6 1"/></material>
+    </visual>
+  </link>
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/><child link="camera_link"/>
+    <origin xyz="0.42 0 0.30"/>
+  </joint>
+  <link name="camera_optical_frame"/>
+  <joint name="camera_optical_joint" type="fixed">
+    <parent link="camera_link"/><child link="camera_optical_frame"/>
+    <origin xyz="0 0 0" rpy="${-PI/2} 0 ${-PI/2}"/>
+  </joint>
+
+  <gazebo reference="base_link">
+    <mu1>0.0</mu1><mu2>0.0</mu2>
+    <material>Gazebo/Orange</material>
+  </gazebo>
+
+  <!-- IMU (đã gồm trọng lực, đơn vị m/s^2) -->
+  <gazebo reference="imu_link">
+    <sensor name="imu" type="imu">
+      <always_on>true</always_on>
+      <update_rate>200</update_rate>
+      <imu>
+        <angular_velocity>
+          <x><noise type="gaussian"><mean>0</mean><stddev>0.002</stddev><bias_mean>0.0005</bias_mean><bias_stddev>0.0001</bias_stddev></noise></x>
+          <y><noise type="gaussian"><mean>0</mean><stddev>0.002</stddev><bias_mean>0.0005</bias_mean><bias_stddev>0.0001</bias_stddev></noise></y>
+          <z><noise type="gaussian"><mean>0</mean><stddev>0.002</stddev><bias_mean>0.0005</bias_mean><bias_stddev>0.0001</bias_stddev></noise></z>
+        </angular_velocity>
+        <linear_acceleration>
+          <x><noise type="gaussian"><mean>0</mean><stddev>0.02</stddev><bias_mean>0.01</bias_mean><bias_stddev>0.002</bias_stddev></noise></x>
+          <y><noise type="gaussian"><mean>0</mean><stddev>0.02</stddev><bias_mean>0.01</bias_mean><bias_stddev>0.002</bias_stddev></noise></y>
+          <z><noise type="gaussian"><mean>0</mean><stddev>0.02</stddev><bias_mean>0.01</bias_mean><bias_stddev>0.002</bias_stddev></noise></z>
+        </linear_acceleration>
+      </imu>
+      <plugin name="imu_plugin" filename="libgazebo_ros_imu_sensor.so">
+        <topicName>imu/data</topicName>
+        <bodyName>imu_link</bodyName>
+        <frameName>imu_link</frameName>
+        <updateRateHZ>200.0</updateRateHZ>
+        <gaussianNoise>0.0</gaussianNoise>
+        <xyzOffset>0 0 0</xyzOffset>
+        <rpyOffset>0 0 0</rpyOffset>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- LiDAR 3D: vùng nhìn kiểu Mid360, xuất PointCloud2 (velodyne plugin) -> node lidar_to_livox -> /livox/lidar -->
+  <gazebo reference="lidar_link">
+    <xacro:if value="$(arg gpu)">
+      <xacro:property name="ray_type" value="gpu_ray"/>
+      <xacro:property name="ray_lib" value="libgazebo_ros_velodyne_gpu_laser.so"/>
+    </xacro:if>
+    <xacro:unless value="$(arg gpu)">
+      <xacro:property name="ray_type" value="ray"/>
+      <xacro:property name="ray_lib" value="libgazebo_ros_velodyne_laser.so"/>
+    </xacro:unless>
+    <sensor name="lidar" type="${ray_type}">
+      <always_on>true</always_on>
+      <update_rate>10</update_rate>
+      <visualize>false</visualize>
+      <ray>
+        <scan>
+          <horizontal><samples>$(arg lidar_h_samples)</samples><resolution>1</resolution><min_angle>${-PI}</min_angle><max_angle>${PI}</max_angle></horizontal>
+          <vertical><samples>$(arg lidar_v_samples)</samples><resolution>1</resolution><min_angle>-0.1222</min_angle><max_angle>0.9076</max_angle></vertical>
+        </scan>
+        <range><min>0.1</min><max>40.0</max><resolution>0.01</resolution></range>
+      </ray>
+      <plugin name="lidar_plugin" filename="${ray_lib}">
+        <topicName>/lidar/points</topicName>
+        <frameName>lidar_link</frameName>
+        <organize_cloud>false</organize_cloud>
+        <min_range>0.1</min_range>
+        <max_range>40.0</max_range>
+        <gaussianNoise>0.01</gaussianNoise>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <!-- Camera -->
+  <gazebo reference="camera_link">
+    <sensor name="camera" type="camera">
+      <always_on>true</always_on>
+      <update_rate>20</update_rate>
+      <camera>
+        <horizontal_fov>1.25</horizontal_fov>
+        <image><width>640</width><height>480</height><format>R8G8B8</format></image>
+        <clip><near>0.05</near><far>80</far></clip>
+        <noise><type>gaussian</type><mean>0.0</mean><stddev>0.007</stddev></noise>
+      </camera>
+      <plugin name="camera_plugin" filename="libgazebo_ros_camera.so">
+        <cameraName>camera</cameraName>
+        <imageTopicName>image_raw</imageTopicName>
+        <cameraInfoTopicName>camera_info</cameraInfoTopicName>
+        <frameName>camera_optical_frame</frameName>
+        <updateRate>20</updateRate>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+  <gazebo>
+    <!-- Dẫn động vi sai. Odometry của plugin KHÔNG dùng cho thuật toán; encoder -> node wheel_encoder -->
+    <plugin name="diff_drive" filename="libgazebo_ros_diff_drive.so">
+      <commandTopic>cmd_vel</commandTopic>
+      <odometryTopic>diffdrive/odom</odometryTopic>
+      <odometryFrame>odom</odometryFrame>
+      <robotBaseFrame>base_link</robotBaseFrame>
+      <odometrySource>encoder</odometrySource>
+      <publishOdomTF>false</publishOdomTF>
+      <publishWheelTF>false</publishWheelTF>
+      <publishTf>false</publishTf>
+      <publishWheelJointState>true</publishWheelJointState>
+      <leftJoint>left_wheel_joint</leftJoint>
+      <rightJoint>right_wheel_joint</rightJoint>
+      <wheelSeparation>${sep}</wheelSeparation>
+      <wheelDiameter>${2*r}</wheelDiameter>
+      <wheelAcceleration>0</wheelAcceleration>  <!-- 0 = không giới hạn -> phanh gấp gây trượt -->
+      <wheelTorque>60</wheelTorque>
+      <updateRate>100</updateRate>
+      <rosDebugLevel>na</rosDebugLevel>
+    </plugin>
+
+    <!-- Ground truth tư thế base_link trong world -->
+    <plugin name="ground_truth" filename="libgazebo_ros_p3d.so">
+      <alwaysOn>true</alwaysOn>
+      <updateRate>100.0</updateRate>
+      <bodyName>base_link</bodyName>
+      <topicName>ground_truth/odom</topicName>
+      <frameName>world</frameName>
+      <gaussianNoise>0.0</gaussianNoise>
+    </plugin>
+  </gazebo>
+</robot>

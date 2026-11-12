@@ -1,0 +1,46 @@
+<launch>
+  <!-- Nhà xưởng + AGV trong Gazebo 11.
+       roslaunch kilvo_agv_gazebo sim.launch gui:=true
+       Tùy chọn: scenario:=true (tự chạy kịch bản), kilvo:=true, record:=true, rviz:=true -->
+  <arg name="gui" default="true"/>
+  <arg name="rviz" default="false"/>
+  <arg name="scenario" default="false"/>
+  <arg name="kilvo" default="false"/>
+  <arg name="record" default="false"/>
+  <arg name="output_dir" default=""/>
+  <arg name="gpu_lidar" default="false"/>
+  <arg name="lidar_h_samples" default="720"/>
+  <arg name="lidar_v_samples" default="24"/>
+  <arg name="x" default="-18.0"/>
+  <arg name="y" default="4.0"/>
+  <arg name="yaw" default="0.0"/>
+
+  <param name="/use_sim_time" value="true"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find kilvo_agv_gazebo)/worlds/warehouse.world"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+  </include>
+
+  <param name="robot_description"
+         command="$(find xacro)/xacro $(find kilvo_agv_gazebo)/urdf/agv.urdf.xacro gpu:=$(arg gpu_lidar) lidar_h_samples:=$(arg lidar_h_samples) lidar_v_samples:=$(arg lidar_v_samples)"/>
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher"/>
+  <node pkg="gazebo_ros" type="spawn_model" name="spawn_agv" output="screen"
+        args="-urdf -param robot_description -model agv -x $(arg x) -y $(arg y) -z 0.105 -Y $(arg yaw)"/>
+
+  <node pkg="kilvo_agv_gazebo" type="lidar_to_livox" name="lidar_to_livox" output="screen"/>
+  <node pkg="kilvo_agv_gazebo" type="wheel_encoder.py" name="wheel_encoder" output="screen"/>
+
+  <node if="$(arg scenario)" pkg="kilvo_agv_gazebo" type="scenario_runner.py" name="scenario_runner" output="screen"/>
+
+  <include if="$(arg kilvo)" file="$(find kilvo_agv_gazebo)/launch/kilvo_agv.launch"/>
+
+  <node if="$(arg record)" pkg="kilvo_agv_gazebo" type="traj_recorder.py" name="traj_recorder" output="screen" required="false">
+    <param name="output_dir" value="$(arg output_dir)"/>
+    <rosparam param="estimate_topics">['/aft_mapped_to_init', '/wheel/odom']</rosparam>
+  </node>
+
+  <node if="$(arg rviz)" pkg="rviz" type="rviz" name="rviz_sim" args="-d $(find kilvo_agv_gazebo)/rviz/sim.rviz"/>
+</launch>
