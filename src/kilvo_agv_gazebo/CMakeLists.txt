@@ -17,5 +17,5 @@ add_dependencies(lidar_to_livox ${catkin_EXPORTED_TARGETS})   # đợi sinh head
 
 # ===== 4. NODE PYTHON: cho phép chạy bằng rosrun =====
 catkin_install_python(PROGRAMS
-  scripts/wheel_encoder.py scripts/scenario_runner.py scripts/traj_recorder.py scripts/eval_ate.py
+  scripts/wheel_encoder.py scripts/scenario_runner.py scripts/traj_recorder.py scripts/eval_ate.py scripts/pcd_to_grid.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})

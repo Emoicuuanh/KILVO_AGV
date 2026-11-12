@@ -1,0 +1,15 @@
+# ===== COSTMAP TOÀN CỤC: cả nhà xưởng, dùng để lập đường đi =====
+global_costmap:
+  global_frame: map
+  robot_base_frame: base_link
+  update_frequency: 2.0
+  publish_frequency: 1.0
+  transform_tolerance: 0.5
+  static_map: true
+  plugins:
+    - {name: static_layer, type: "costmap_2d::StaticLayer"}      # bản đồ từ map_server (KILVO)
+    - {name: obstacle_layer, type: "costmap_2d::ObstacleLayer"}  # vật cản mới từ LiDAR
+    - {name: inflation_layer, type: "costmap_2d::InflationLayer"}
+  static_layer:
+    map_topic: /map
+    track_unknown_space: false   # ô "chưa biết" coi như đi được

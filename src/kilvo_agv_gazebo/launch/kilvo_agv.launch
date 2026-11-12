@@ -10,10 +10,13 @@
   <arg name="config" default="$(find kilvo_agv_gazebo)/config/kilvo_agv_sim.yaml"/>    <!-- config thuật toán -->
   <arg name="camera" default="$(find kilvo_agv_gazebo)/config/camera_agv_sim.yaml"/>   <!-- thông số camera -->
   <arg name="rviz" default="false"/>                                                     <!-- RViz của tác giả -->
+  <arg name="save_map" default="false"/>  <!-- true: gom bản đồ, ghi src/kilvo/log/PCD/all_raw_points.pcd khi tắt KILVO -->
 
   <!-- ===== 2. NẠP CONFIG CHÍNH vào namespace gốc ===== -->
   <!-- KILVO đọc bằng nh.param("common/lid_topic"...) với NodeHandle gốc -> tham số phải ở /common/... -->
   <rosparam command="load" file="$(arg config)"/>
+  <!-- Ghi đè pcd_save_en từ dòng lệnh (save_map:=true) mà không sửa file config -->
+  <param name="/pcd_save/pcd_save_en" value="$(arg save_map)"/>
 
   <!-- ===== 3. NODE KILVO ===== -->
   <!-- Tên node phải là laserMapping: KILVO đọc thông số camera trong namespace /laserMapping -->

@@ -22,6 +22,9 @@
   <!-- Thành phần chạy kèm -->
   <arg name="scenario" default="false"/>       <!-- true: robot tự chạy kịch bản config/scenario.yaml -->
   <arg name="kilvo" default="false"/>          <!-- true: chạy KILVO (launch/kilvo_agv.launch) -->
+  <arg name="kilvo_rviz" default="false"/>     <!-- true: mở thêm RViz của KILVO (bản đồ màu, quỹ đạo) -->
+  <arg name="save_map" default="false"/>       <!-- true: KILVO lưu bản đồ .pcd khi tắt (src/kilvo/log/PCD/) -->
+  <arg name="gt_tf" default="true"/>           <!-- true: TF world->base_link theo vị trí THẬT (để xem). nav.launch đặt false vì vị trí lấy từ KILVO -->
   <arg name="record" default="false"/>         <!-- true: ghi quỹ đạo GT + KILVO + odom bánh ra file TUM -->
   <arg name="output_dir" default=""/>          <!-- thư mục kết quả cho record (trống = /ws/results/<giờ>) -->
   <!-- Cấu hình LiDAR mô phỏng -->
@@ -59,14 +62,19 @@
   <!-- 4a. PointCloud2 của Gazebo -> livox_ros_driver/CustomMsg (/livox/lidar) cho KILVO đọc -->
   <node pkg="kilvo_agv_gazebo" type="lidar_to_livox" name="lidar_to_livox" output="screen"/>
   <!-- 4b. Góc bánh -> encoder lượng tử, odometry bánh (/wheel/odom), nhãn trượt thật (/sim/slip) -->
-  <node pkg="kilvo_agv_gazebo" type="wheel_encoder.py" name="wheel_encoder" output="screen"/>
+  <node pkg="kilvo_agv_gazebo" type="wheel_encoder.py" name="wheel_encoder" output="screen">
+    <param name="publish_gt_tf" value="$(arg gt_tf)"/>
+  </node>
 
   <!-- ===== 5. KỊCH BẢN TỰ ĐỘNG (scenario:=true) ===== -->
   <!-- Lái robot theo các bước trong config/scenario.yaml, điều khiển vòng kín theo ground truth -->
   <node if="$(arg scenario)" pkg="kilvo_agv_gazebo" type="scenario_runner.py" name="scenario_runner" output="screen"/>
 
   <!-- ===== 6. KILVO (kilvo:=true) ===== -->
-  <include if="$(arg kilvo)" file="$(find kilvo_agv_gazebo)/launch/kilvo_agv.launch"/>
+  <include if="$(arg kilvo)" file="$(find kilvo_agv_gazebo)/launch/kilvo_agv.launch">
+    <arg name="rviz" value="$(arg kilvo_rviz)"/>
+    <arg name="save_map" value="$(arg save_map)"/>
+  </include>
 
   <!-- ===== 7. GHI QUỸ ĐẠO (record:=true) ===== -->
   <!-- Ghi ground truth + các topic odometry ra file .tum; đánh giá bằng scripts/eval_ate.py -->

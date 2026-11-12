@@ -16,8 +16,11 @@ mkdir -p "$WS/.home" "$WS/results"   # .home: HOME trong container (log ROS, cac
 # ===== 2. TÙY CHỌN THEO MÁY =====
 GL_ENV=()                              # ép vẽ bằng CPU nếu SOFTWARE_GL=1
 [ "${SOFTWARE_GL:-0}" = "1" ] && GL_ENV=(-e LIBGL_ALWAYS_SOFTWARE=1)
-DRI=()                                 # cho container thấy GPU (nếu có)
-[ -e /dev/dri ] && DRI=(--device /dev/dri)
+DRI=()                                 # cho container thấy GPU (nếu có) + quyền mở thiết bị:
+if [ -e /dev/dri ]; then               # ngoài máy, user mở được GPU nhờ ACL; Docker không chép ACL
+  DRI=(--device /dev/dri)              # -> thêm nhóm sở hữu thiết bị (render, video) vào container
+  for g in $(stat -c %g /dev/dri/card* /dev/dri/renderD* 2>/dev/null | sort -u); do DRI+=(--group-add "$g"); done
+fi
 TTY=()                                 # chế độ tương tác chỉ khi chạy từ terminal
 [ -t 0 ] && TTY=(-it)
 NAME=${CONTAINER_NAME:-kilvo_sim}      # tên container (kros dùng tên này để tìm lại)

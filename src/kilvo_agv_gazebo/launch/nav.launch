@@ -1,0 +1,61 @@
+<launch>
+  <!-- ==========================================================================
+       nav.launch — AGV tự dẫn đường bằng move_base, vị trí do KILVO cung cấp (cách A).
+         kros roslaunch kilvo_agv_gazebo nav.launch
+       Rồi trong RViz: chọn "2D Nav Goal" (phím G), bấm-kéo lên bản đồ để đặt đích.
+
+       Bản đồ được dựng khi robot xuất phát ở TRẠM SẠC (-18, 4, hướng +x) -> gốc bản đồ = điểm đó.
+       Khi dẫn đường, robot xuất phát cách trạm sạc 0.5 m về phía trước (-17.5, 4) để đuôi xe không
+       nằm sát trạm sạc (costmap coi là sắp va chạm -> DWA không tìm được quỹ đạo).
+       TF map -> camera_init bù đúng độ lệch giữa điểm xuất phát này và gốc bản đồ.
+
+       Cây TF:  map ──(tĩnh, trùng)──> camera_init ──(KILVO)──> aft_mapped (=IMU)
+                    ──(tĩnh, -0.10 m z)──> base_link ──(robot_state_publisher)──> lidar/camera/imu
+       ========================================================================== -->
+
+  <!-- ===== 1. THAM SỐ ===== -->
+  <arg name="map" default="$(find kilvo_agv_gazebo)/maps/warehouse_map.yaml"/>  <!-- bản đồ 2D (từ pcd_to_grid.py) -->
+  <arg name="gui" default="false"/>                                                <!-- cửa sổ Gazebo (nặng) -->
+  <!-- Gốc bản đồ (vị trí lúc dựng bản đồ) và điểm xuất phát khi dẫn đường, tọa độ Gazebo, cùng hướng +x -->
+  <arg name="map_origin_x" default="-18.0"/>
+  <arg name="map_origin_y" default="4.0"/>
+  <arg name="start_x" default="-17.5"/>
+  <arg name="start_y" default="4.0"/>
+
+  <!-- ===== 2. MÔ PHỎNG + KILVO (tắt TF ground truth: base_link chỉ có 1 cha là KILVO) ===== -->
+  <include file="$(find kilvo_agv_gazebo)/launch/sim.launch">
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="kilvo" value="true"/>
+    <arg name="gt_tf" value="false"/>
+    <arg name="x" value="$(arg start_x)"/>
+    <arg name="y" value="$(arg start_y)"/>
+  </include>
+
+  <!-- ===== 3. NỐI KILVO VÀO CÂY TF ===== -->
+  <!-- camera_init (gốc KILVO = điểm xuất phát) nằm lệch (start - map_origin) so với gốc bản đồ -->
+  <arg name="off_x" value="$(eval arg('start_x') - arg('map_origin_x'))"/>
+  <arg name="off_y" value="$(eval arg('start_y') - arg('map_origin_y'))"/>
+  <node pkg="tf2_ros" type="static_transform_publisher" name="tf_map_camera_init"
+        args="$(arg off_x) $(arg off_y) 0 0 0 0 map camera_init"/>
+  <!-- KILVO ước lượng tư thế IMU (aft_mapped); base_link nằm dưới IMU 0.10 m (xem URDF) -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="tf_imu_base"
+        args="0 0 -0.10 0 0 0 aft_mapped base_link"/>
+
+  <!-- ===== 4. BẢN ĐỒ ===== -->
+  <node pkg="map_server" type="map_server" name="map_server" args="$(arg map)">
+    <param name="frame_id" value="map"/>
+  </node>
+
+  <!-- ===== 5. MOVE_BASE: lập đường (navfn) + bám đường (DWA) -> /cmd_vel ===== -->
+  <node pkg="move_base" type="move_base" name="move_base" output="screen">
+    <rosparam file="$(find kilvo_agv_gazebo)/config/nav/move_base.yaml" command="load"/>
+    <rosparam file="$(find kilvo_agv_gazebo)/config/nav/costmap_common.yaml" command="load" ns="global_costmap"/>
+    <rosparam file="$(find kilvo_agv_gazebo)/config/nav/costmap_common.yaml" command="load" ns="local_costmap"/>
+    <rosparam file="$(find kilvo_agv_gazebo)/config/nav/global_costmap.yaml" command="load"/>
+    <rosparam file="$(find kilvo_agv_gazebo)/config/nav/local_costmap.yaml" command="load"/>
+    <rosparam file="$(find kilvo_agv_gazebo)/config/nav/planners.yaml" command="load"/>
+  </node>
+
+  <!-- ===== 6. RVIZ: bản đồ, costmap, đường đi, công cụ 2D Nav Goal ===== -->
+  <node pkg="rviz" type="rviz" name="rviz_nav" args="-d $(find kilvo_agv_gazebo)/rviz/nav.rviz"/>
+</launch>

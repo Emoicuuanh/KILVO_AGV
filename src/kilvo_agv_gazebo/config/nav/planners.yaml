@@ -1,0 +1,39 @@
+# ===== BỘ LẬP ĐƯỜNG TOÀN CỤC (navfn: Dijkstra trên costmap toàn cục) =====
+NavfnROS:
+  allow_unknown: true
+  default_tolerance: 0.2
+
+# ===== BỘ BÁM ĐƯỜNG CỤC BỘ (DWA) cho xe vi sai =====
+DWAPlannerROS:
+  # topic vận tốc hiện tại của xe (khung base_link). Thiếu topic này DWA coi xe luôn đứng yên
+  # -> mỗi chu kỳ chỉ dám tăng tốc từ 0 -> xe bò ~0.05 m/s.
+  odom_topic: /wheel/odom
+  # vận tốc / gia tốc (m/s, rad/s) — vi sai: không đi ngang (vy = 0)
+  max_vel_x: 1.0
+  min_vel_x: 0.0
+  max_vel_y: 0.0
+  min_vel_y: 0.0
+  max_vel_trans: 1.0
+  min_vel_trans: 0.03   # phải < acc_lim_x / controller_frequency (0.08), nếu không xe đứng yên không khởi động được
+  max_vel_theta: 1.0
+  min_vel_theta: 0.1    # phải < acc_lim_theta / controller_frequency (0.15)
+  acc_lim_x: 0.8
+  acc_lim_y: 0.0
+  acc_lim_theta: 1.5
+  holonomic_robot: false
+  # dung sai tới đích
+  xy_goal_tolerance: 0.15
+  yaw_goal_tolerance: 0.15
+  latch_xy_goal_tolerance: true
+  # mô phỏng quỹ đạo thử
+  sim_time: 1.5
+  vx_samples: 12
+  vy_samples: 1
+  vth_samples: 20
+  # trọng số: bám đường / tới đích / tránh vật
+  path_distance_bias: 32.0
+  goal_distance_bias: 24.0
+  occdist_scale: 0.02
+  forward_point_distance: 0.4
+  oscillation_reset_dist: 0.05
+  prune_plan: true
